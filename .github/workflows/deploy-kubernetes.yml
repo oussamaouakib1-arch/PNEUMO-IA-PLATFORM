@@ -1,0 +1,62 @@
+name: Deploy to Kubernetes
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Published GHCR image tag
+        required: true
+        default: "0.1.0"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: "v1.35.0"
+
+      - name: Configure cluster access
+        env:
+          KUBE_CONFIG_BASE64: ${{ secrets.KUBE_CONFIG_BASE64 }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBE_CONFIG_BASE64" | base64 --decode >"$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+          kubectl cluster-info
+
+      - name: Create namespace and model-storage secret
+        env:
+          MODEL_S3_ACCESS_KEY: ${{ secrets.MODEL_S3_ACCESS_KEY }}
+          MODEL_S3_SECRET_KEY: ${{ secrets.MODEL_S3_SECRET_KEY }}
+        run: |
+          kubectl apply -f infra/k8s/base/namespace.yaml
+          kubectl -n pneumonia create secret generic model-storage \
+            --from-literal=access-key="$MODEL_S3_ACCESS_KEY" \
+            --from-literal=secret-key="$MODEL_S3_SECRET_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply manifests
+        run: kubectl apply -k infra/k8s/base
+
+      - name: Select published images
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          kubectl -n pneumonia set image deployment/pneumonia-api \
+            api="ghcr.io/oussamaouakib1-arch/pfe2/pneumonia-api:${IMAGE_TAG}"
+          kubectl -n pneumonia set image deployment/pneumonia-ui \
+            ui="ghcr.io/oussamaouakib1-arch/pfe2/pneumonia-ui:${IMAGE_TAG}"
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n pneumonia rollout status deployment/pneumonia-api --timeout=10m
+          kubectl -n pneumonia rollout status deployment/pneumonia-ui --timeout=5m
+          kubectl -n pneumonia get pods,services,ingress

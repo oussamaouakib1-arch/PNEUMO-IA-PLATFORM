@@ -1,0 +1,40 @@
+groups:
+  - name: pneumonia-api
+    rules:
+      - alert: PneumoniaApiUnavailable
+        expr: up{job="pneumonia-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Pneumonia API is unavailable
+          description: Prometheus has not been able to scrape the API for one minute.
+
+      - alert: PneumoniaApiHighErrorRate
+        expr: |
+          (
+            sum(rate(pneumonia_http_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(pneumonia_http_requests_total[5m])), 0.001)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Pneumonia API error rate is above 5%
+          description: More than 5% of API requests have returned a 5xx response.
+
+      - alert: PneumoniaApiHighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(pneumonia_http_request_duration_seconds_bucket[5m])
+            )
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Pneumonia API p95 latency is above two seconds
+          description: The p95 request latency has exceeded two seconds for five minutes.

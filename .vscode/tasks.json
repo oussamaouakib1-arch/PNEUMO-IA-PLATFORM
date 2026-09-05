@@ -1,0 +1,107 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "API: FastAPI",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "uvicorn", "pneumonia.api.app:app", "--reload", "--port", "8000"],
+      "options": {
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}\\src"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "UI: Streamlit",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "streamlit", "run", "ui\\app.py", "--server.port", "8501"],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "pytest"],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Application complète",
+      "dependsOn": ["API: FastAPI", "UI: Streamlit"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: vérifier la configuration",
+      "type": "shell",
+      "command": "docker",
+      "args": ["compose", "--profile", "application", "config", "--quiet"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: application complète",
+      "type": "shell",
+      "command": "docker",
+      "args": [
+        "compose",
+        "--profile",
+        "application",
+        "up",
+        "--build",
+        "-d",
+        "api",
+        "ui"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: supervision complète",
+      "type": "shell",
+      "command": "docker",
+      "args": [
+        "compose",
+        "--profile",
+        "application",
+        "--profile",
+        "monitoring",
+        "up",
+        "-d",
+        "api",
+        "ui",
+        "prometheus",
+        "grafana"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Kubernetes: valider les manifests",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "kubectl kustomize infra/k8s/base | docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0 -strict -summary"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "API: test de charge",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": [
+        "scripts\\load_test.py",
+        "--image",
+        "data\\raw\\kaggle\\chest_xray\\chest_xray\\test\\PNEUMONIA\\person1_virus_6.jpeg"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

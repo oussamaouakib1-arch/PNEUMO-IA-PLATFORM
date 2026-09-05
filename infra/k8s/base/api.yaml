@@ -1,0 +1,150 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pneumonia-api
+  namespace: pneumonia
+  labels:
+    app.kubernetes.io/name: pneumonia-api
+    app.kubernetes.io/part-of: pneumonia-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pneumonia-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pneumonia-api
+        app.kubernetes.io/part-of: pneumonia-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8000"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: fetch-model
+          image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              mkdir -p /shared/models/baseline /shared/artifacts/evaluation/baseline
+              mc alias set model-store \
+                "${MODEL_S3_ENDPOINT}" "${MODEL_S3_ACCESS_KEY}" "${MODEL_S3_SECRET_KEY}"
+              mc cp \
+                "model-store/${MODEL_S3_BUCKET}/${MODEL_CHECKPOINT_OBJECT}" \
+                /shared/models/baseline/best_model.pt
+              mc cp \
+                "model-store/${MODEL_S3_BUCKET}/${MODEL_EVALUATION_OBJECT}" \
+                /shared/artifacts/evaluation/baseline/evaluation.json
+          envFrom:
+            - configMapRef:
+                name: pneumonia-config
+          env:
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
+            - name: MODEL_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: model-storage
+                  key: access-key
+            - name: MODEL_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: model-storage
+                  key: secret-key
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: model-files
+              mountPath: /shared
+            - name: temporary
+              mountPath: /tmp
+      containers:
+        - name: api
+          image: ghcr.io/oussamaouakib1-arch/PNEUMO-IA-PLATFORM/pneumonia-api:0.1.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: pneumonia-config
+          ports:
+            - name: http
+              containerPort: 8000
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 3Gi
+          volumeMounts:
+            - name: model-files
+              mountPath: /app/models
+              subPath: models
+              readOnly: true
+            - name: model-files
+              mountPath: /app/artifacts/evaluation
+              subPath: artifacts/evaluation
+              readOnly: true
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: model-files
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: temporary
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pneumonia-api
+  namespace: pneumonia
+  labels:
+    app.kubernetes.io/name: pneumonia-api
+spec:
+  selector:
+    app.kubernetes.io/name: pneumonia-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.test-tmp/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+tmp/
+.tmp.drivedownload/
+.tmp.driveupload/
+
+# Environments and secrets
+.env
+.env.*
+!.env.example
+admin_MDP.txt
+*.txt.bak
+
+# Data and model artifacts
+
+data/validated/*
+data/raw/*
+data/processed/*
+data/splits/*
+data/rejected/*
+models/*
+artifacts/*
+mlruns/
+!data/**/.gitkeep
+!models/.gitkeep
+!artifacts/.gitkeep
+
+# Notebooks
+.ipynb_checkpoints/
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.DS_Store
+Thumbs.db
+
+# Office temporary lock files
+~$*.docx
+~$*.xlsx
+~$*.pptx
+
+# Infrastructure
+terraform.tfstate
+terraform.tfstate.*
+.terraform/
+infra/k8s/base/secret.yaml

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pneumonia-config
+  namespace: pneumonia
+data:
+  APP_ENV: production
+  LOG_LEVEL: INFO
+  PNEUMONIA_API_URL: http://pneumonia-api:8000
+  MODEL_S3_ENDPOINT: https://s3.example.com
+  MODEL_S3_BUCKET: pneumonia-models
+  MODEL_CHECKPOINT_OBJECT: baseline/best_model.pt
+  MODEL_EVALUATION_OBJECT: baseline/evaluation.json
