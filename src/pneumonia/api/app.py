@@ -87,7 +87,7 @@ def create_app(service: PredictionService | None = None) -> FastAPI:
         content = await file.read(MAX_UPLOAD_BYTES + 1)
         if len(content) > MAX_UPLOAD_BYTES:
             raise HTTPException(
-                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                status_code=413,
                 detail="La taille maximale est de 10 Mo.",
             )
         prediction_service: PredictionService = request.app.state.prediction_service
@@ -95,7 +95,7 @@ def create_app(service: PredictionService | None = None) -> FastAPI:
             result = prediction_service.predict(content, include_gradcam)
         except InvalidImageError as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=422,
                 detail=str(exc),
             ) from exc
         api_metrics: ApiMetrics = request.app.state.metrics

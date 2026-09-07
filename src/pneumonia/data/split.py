@@ -10,7 +10,6 @@ SPLIT_NAMES = ("train", "val", "test")
 
 
 def duplicate_hashes(records: Iterable[ImageRecord]) -> dict[str, list[str]]:
-    
     files_by_hash: dict[str, list[str]] = defaultdict(list)
     for record in records:
         if record.is_valid:

@@ -22,6 +22,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "bandit>=1.8,<2",
+  "httpx>=0.27,<0.29",
   "mypy>=1.11,<2",
   "pre-commit>=3.8,<5",
   "pytest>=8.3,<9",
@@ -42,7 +43,10 @@ ml = [
   "torchvision>=0.19,<1",
 ]
 api = [
-  "fastapi>=0.115,<1",
+  # Keep the Starlette/TestClient combination compatible with httpx.
+  # Future Starlette 1.x releases currently require the unavailable httpx2 package.
+  "fastapi>=0.115,<0.116",
+  "starlette>=0.40,<0.47",
   "prometheus-client>=0.21,<1",
   "python-multipart>=0.0.9,<1",
   "uvicorn[standard]>=0.30,<1",
@@ -69,9 +73,17 @@ fail_under = 80
 target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
+# Script generateur du cahier des charges (document Word) : long texte FR et
+# imports qui varient a chaque regeneration -> exclu du lint et du format.
+extend-exclude = ["scripts/export_docx_cahier_des_charges.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Generateur du cahier des charges : longues phrases FR (E501) et
+# typographie francaise volontaire dans le document Word produit (RUF001).
+"scripts/export_docx_cahier_des_charges.py" = ["E501", "RUF001", "I001", "F401"]
 
 [tool.ruff.format]
 quote-style = "double"

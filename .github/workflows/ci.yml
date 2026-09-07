@@ -83,10 +83,12 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.target }}
 
   smoke:
-    # Start the api container (no real model) and verify /health + /metrics respond.
-    # The model volume is intentionally absent: PredictionService raises FileNotFoundError
-    # on startup, which is expected behaviour without a checkpoint.
-    # We therefore only validate that the image boots and the static endpoints answer.
+    # Boot the api container against an untrained checkpoint and verify the
+    # static endpoints answer. The checkpoint is randomly initialised: we assert
+    # that the service starts and that /health + /metrics respond, not that the
+    # predictions are meaningful. Starting without any checkpoint made
+    # PredictionService raise FileNotFoundError mid-startup, which raced the
+    # health check and produced intermittent "connection reset" (curl 56).
     needs: containers
     runs-on: ubuntu-latest
     steps:
@@ -105,36 +107,46 @@ jobs:
           tags: pneumonia-api:ci
           cache-from: type=gha,scope=api
 
-      - name: Start api container (no model — boot check only)
+      - name: Generate an untrained checkpoint
+        run: |
+          mkdir -p models/baseline
+          docker run --rm --user root \
+            -v "$PWD/models:/app/models" \
+            -v "$PWD/scripts:/app/scripts:ro" \
+            pneumonia-api:ci \
+            python scripts/ci_smoke_checkpoint.py models/baseline/best_model.pt
+
+      - name: Start api container
         run: |
           docker run -d \
             --name api-smoke \
             -p 8000:8000 \
             -e APP_ENV=test \
-            pneumonia-api:ci \
-            python -m uvicorn pneumonia.api.app:app --host 0.0.0.0 --port 8000
-          # Give the process up to 30 s to start even without a model checkpoint
+            -v "$PWD/models:/app/models:ro" \
+            pneumonia-api:ci
           for _ in $(seq 1 30); do
-            if docker logs api-smoke 2>&1 | grep -qE "(Application startup complete|FileNotFoundError)"; then
-              break
+            docker logs api-smoke 2>&1 | grep -q "Application startup complete" && break
+            if ! docker ps --filter "name=api-smoke" --filter "status=running" | grep -q api-smoke; then
+              echo "Container exited before startup completed"
+              docker logs api-smoke
+              exit 1
             fi
             sleep 1
           done
           docker logs api-smoke
 
-      - name: Verify /metrics endpoint is reachable
+      - name: Verify static endpoints
         run: |
-          # The container may have exited with FileNotFoundError (missing model),
-          # but the HTTP server may not have started. We check the metrics
-          # endpoint only if the container is still running.
-          if docker ps --filter "name=api-smoke" --filter "status=running" | grep -q api-smoke; then
-            curl --retry 5 --retry-delay 2 --fail http://localhost:8000/metrics
-            echo "Metrics endpoint OK"
-          else
-            echo "Container exited (expected: no model checkpoint in CI) — checking logs for boot error"
-            docker logs api-smoke 2>&1 | grep "FileNotFoundError" || \
-              (echo "Unexpected failure" && docker logs api-smoke && exit 1)
-          fi
+          curl --retry 10 --retry-delay 2 --retry-connrefused --fail --show-error \
+            http://localhost:8000/health
+          echo
+          curl --retry 5 --retry-delay 2 --retry-connrefused --fail --show-error \
+            http://localhost:8000/metrics >/dev/null
+          echo "Smoke endpoints OK"
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker logs api-smoke || true
 
       - name: Cleanup
         if: always()
